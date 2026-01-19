@@ -1,0 +1,29 @@
+# docker-compose.yml
+version: '3'
+
+services:
+  serving:
+    build:
+      context: ./
+      dockerfile: ./Dockerfile.serving
+    image: ift6758/serving:latest
+    ports:
+      - 5000:5000
+    environment:
+      WANDB_API_KEY: ${WANDB_API_KEY}
+
+  streamlit:
+    build:
+      context: ./
+      dockerfile: ./Dockerfile.streamlit
+    image: ift6758/streamlit:latest
+    ports:
+      - "8501:8501"
+    environment:
+      - SERVING_IP=serving  # Adresse IP interne du conteneur Flask
+      - WANDB_API_KEY=${WANDB_API_KEY}
+    depends_on:
+      - serving   # S'assurer que Flask démarre avant Streamlit (sinon erreur)
+      
+
+     
