@@ -7,23 +7,26 @@ import plotly.graph_objects as go
 from ift6758.client.serving_client import ServingClient
 from ift6758.client.game_client import GameClient
 
-# Information regarding BONUS features added (Part 7)
-with st.expander("ℹ️ Quick Guide"):
-    st.markdown("""
-    1. **Load Model:** Click **Get Model** in the sidebar (required first).
-    2. **Fetch Data:** Enter a **Game ID** (e.g., `2023020001`) and click **Ping Game** (each click loads X game events).
-    3. **Analyze:** View the **Scoreboard**, **Shot Maps**, and **xG Charts** below.
-    """)
-
-st.divider()
+# --- Configuration for Default Model ---
+DEFAULT_WORKSPACE = "IFT6758--2025-A03"
+DEFAULT_MODEL = "LogReg_Model_with_distance_and_angle"
+DEFAULT_VERSION = "v6"
+DEFAULT_PROJECT = "IFT6758.2025-A03"
 
 st.title("NHL Goal prediction")
 
+# --- Initialize Clients ---
+
 # Maintain a single ServingClient for the entire session
 if "serving_client" not in st.session_state:
-    # Dynamically get backend IP ("127.0.0.1" default for local testing)
     serving_ip = os.environ.get("SERVING_IP", "127.0.0.1")
-    st.session_state["serving_client"] = ServingClient(ip=serving_ip, port=5000)
+    serving_port = 5000
+
+    # Remove protocol if present (just to be clean), but the client handles the rest
+    serving_ip = serving_ip.replace("https://", "").replace("http://", "").strip("/")
+
+    # We can pass any port (e.g. 80), the client ignores it if "run.app" is in the IP
+    st.session_state["serving_client"] = ServingClient(ip=serving_ip, port=80)
 
 serving_client = st.session_state["serving_client"]
 
@@ -36,40 +39,40 @@ game_client = st.session_state["game_client"]
 if "events_buffers" not in st.session_state:
     st.session_state["events_buffers"] = {}
 
-# Shortcuts
-serving_client = st.session_state["serving_client"]
-game_client = st.session_state["game_client"]
+# --- Auto-Load Default Model ---
+# This replaces the manual sidebar download
+if serving_client.model is None:
+    with st.spinner(f"Initializing: Downloading default model ({DEFAULT_MODEL})..."):
+        try:
+            result = serving_client.download_registry_model(
+                entity=DEFAULT_WORKSPACE,
+                artifact_name=DEFAULT_MODEL,
+                project=DEFAULT_PROJECT,
+                version=DEFAULT_VERSION
+            )
 
-# Sidebar for model loading
-with st.sidebar:
-    st.header("Model Configuration")
-    workspace = st.text_input("Workspace", value="IFT6758--2025-A03")
-    model = st.text_input("Model", value="LogReg_Model_with_distance_and_angle")
-    version = st.text_input("Version", value="v6")
-    get_model = st.button("Get Model")
+            # Update features to use if provided
+            if 'features' in result and result['features'] is not None:
+                serving_client.features = result['features']
 
-    if get_model:
-        # Download model from registry
-        with st.spinner("Downloading model..."):
-            try:
-                result = serving_client.download_registry_model(
-                    entity=workspace,
-                    artifact_name=model,
-                    project="IFT6758.2025-A03",
-                    version=version
-                )
+            st.success(f"Model loaded successfully")
+        except Exception as e:
+            st.error(f"Failed to auto-load model: {e}")
 
-                # Update features to use if provided
-                if 'features' in result and result['features'] is not None:
-                    serving_client.features = result['features']
-                    st.sidebar.success(f"Model features set: {serving_client.features}")
+# --- Instructions ---
+# Updated to remove the "Load Model" step
+with st.expander("ℹ️ How to use"):
+    st.markdown("""
+    1. **Fetch Data:** Enter a **Game ID** (e.g., `2023020001`) and click **Ping Game** (each click loads 5 game events).
+    2. **Analyze:** View the **Scoreboard**, **Shot Maps**, and **xG Charts** below.
+    """)
 
-                st.success(f"Model downloaded successfully")
-            except Exception as e:
-                st.error(f"Failed to download model: {e}")
+st.divider()
 
-# Container to ping a game and get data + predictions
+# --- Main Application Logic ---
+
 with st.container():
+    # Game ID Input
     game_id = st.text_input("Game ID", value="2023020001")
 
     if 'previous_game_id' not in st.session_state:
@@ -84,11 +87,13 @@ with st.container():
         st.session_state["new_events_df"] = pd.DataFrame()
         st.session_state['previous_game_id'] = game_id
 
-    # Disable button if no model is loaded
+    # Disable button if auto-load failed (model is None)
     ping_disabled = (serving_client.model is None)
+
     if ping_disabled:
-        st.warning("No model loaded — please load one in the sidebar before continuing")
-    ping_game = st.button("Ping Game", disabled=ping_disabled)
+        st.error("Model failed to load. Please check your connection or configuration.")
+
+    ping_game = st.button("Get Events", disabled=ping_disabled)
 
     if ping_game:
         with st.spinner("Fetching game data..."):
@@ -114,6 +119,7 @@ with st.container():
             else:
                 st.info("No new events — showing last known state.")
 
+# --- Dashboard & Scoreboard ---
 with st.container():
     if "events_buffers" in st.session_state and game_id in st.session_state["events_buffers"]:
 
@@ -175,24 +181,7 @@ with st.container():
                 delta=f"{diff_away:.2f}"
             )
 
-with st.container():
-    st.subheader("Data used for predictions")
-    cols_to_show = ["Distance", "Angle", "Goal", "Empty Net", "prediction"]
-    if "events_buffers" in st.session_state and game_id in st.session_state["events_buffers"]:
-        buffer = st.session_state["events_buffers"][game_id]
-
-    if "new_events_df" in st.session_state:
-        # If new chunk is empty, show last chunk from buffer
-        if st.session_state["new_events_df"].empty:
-            # Show last chunk from buffer
-            if "events_buffers" in st.session_state and game_id in st.session_state["events_buffers"]:
-                st.write(buffer[cols_to_show])
-            else:
-                st.write("No data available at the moment.")
-        else:
-            # Show new chunk
-            st.write(buffer[cols_to_show])
-
+# --- Visualizations ---
 with st.container():
     st.subheader("Visualizations")
 
@@ -238,24 +227,27 @@ with st.container():
                     rink_image_path = "nhl_rink.png"
 
                     # Encoding
-                    with open(rink_image_path, "rb") as image_file:
-                        encoded_image = base64.b64encode(image_file.read()).decode()
+                    try:
+                        with open(rink_image_path, "rb") as image_file:
+                            encoded_image = base64.b64encode(image_file.read()).decode()
 
-                    # Add background image
-                    fig_shot.add_layout_image(
-                        dict(
-                            source='data:image/png;base64,' + encoded_image,
-                            xref="x",
-                            yref="y",
-                            x=-100,
-                            y=42.5,
-                            sizex=200,
-                            sizey=85,
-                            sizing="contain",
-                            opacity=1,
-                            layer="below"
+                        # Add background image
+                        fig_shot.add_layout_image(
+                            dict(
+                                source='data:image/png;base64,' + encoded_image,
+                                xref="x",
+                                yref="y",
+                                x=-100,
+                                y=42.5,
+                                sizex=200,
+                                sizey=85,
+                                sizing="contain",
+                                opacity=1,
+                                layer="below"
+                            )
                         )
-                    )
+                    except FileNotFoundError:
+                        st.warning("Rink image not found. Displaying map without background.")
 
                     # Fix axes to match rink and remove grid
                     fig_shot.update_layout(
@@ -336,3 +328,23 @@ with st.container():
                     st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.warning("Unable to display Expected Goals (xG) evolution over time.")
+
+
+# --- Data Table ---
+with st.container():
+    st.subheader("Data used for predictions")
+    cols_to_show = ["Distance", "Angle", "Goal", "Empty Net", "prediction"]
+    if "events_buffers" in st.session_state and game_id in st.session_state["events_buffers"]:
+        buffer = st.session_state["events_buffers"][game_id]
+
+    if "new_events_df" in st.session_state:
+        # If new chunk is empty, show last chunk from buffer
+        if st.session_state["new_events_df"].empty:
+            # Show last chunk from buffer
+            if "events_buffers" in st.session_state and game_id in st.session_state["events_buffers"]:
+                st.write(buffer)
+            else:
+                st.write("No data available at the moment.")
+        else:
+            # Show new chunk
+            st.write(buffer)
