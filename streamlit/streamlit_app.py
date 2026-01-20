@@ -119,7 +119,7 @@ with st.container():
     with col2:
         st.write("")
         st.write("")
-        ping_game = st.button("Get Events 📡", disabled=ping_disabled, use_container_width=True)
+        ping_game = st.button("Get Events 📡", disabled=ping_disabled, width='stretch')
 
     if ping_game and game_id:
         with st.spinner("Fetching game data..."):
@@ -190,7 +190,7 @@ with st.container():
         diff_away = score_away - away_xg
 
         # Display dashboard
-        st.markdown(f"## Game {game_id}: **{home_team} vs {away_team}**")
+        st.markdown(f"## Game: **{home_team} vs {away_team}**")
         st.write(f"**Period {period} — {clock_display} left**")
 
         col1, col2 = st.columns(2)
@@ -296,7 +296,7 @@ with st.container():
                         modebar_remove=['zoom', 'pan', 'select', 'lasso', 'autoscale', 'resetview']
                     )
 
-                    st.plotly_chart(fig_shot, use_container_width=True)
+                    st.plotly_chart(fig_shot, width='stretch')
                 else:
                     st.warning(f"Unable to display shot map.")
 
@@ -351,7 +351,7 @@ with st.container():
                         showlegend=True,
                     )
 
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width='stretch')
                 else:
                     st.warning("Unable to display Expected Goals (xG) evolution over time.")
 
@@ -366,4 +366,4 @@ with st.container():
             features_to_show = serving_client.features if serving_client.features else []
             cols = features_to_show + ["prediction"]
             cols = [c for c in cols if c in buffer.columns]
-            st.dataframe(buffer[cols], use_container_width=True)
+            st.dataframe(buffer[cols], width='stretch')
