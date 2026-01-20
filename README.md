@@ -114,7 +114,7 @@ The application consists of two decoupled microservices:
     * Handles feature alignment and validation.
 
 **Data Flow:**
-`NHL API` → `Game Client (ETL)` → `Flask API (Inference)` → `Streamlit (Visualization)`
+`NHL API` → `Game Client` → `Flask API (Inference)` → `Streamlit (Visualization)`
 
 ### Features
 * **Schedule Explorer:** Select any date and pick specific matchups (e.g., *Canadiens vs. Bruins*).
