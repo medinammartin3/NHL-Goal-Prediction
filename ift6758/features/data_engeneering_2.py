@@ -192,6 +192,26 @@ def build_full_feature_set(all_seasons_list, output_filename):
     return final
 
 
+def apply_feature_engineering(df):
+    df = ensure_game_seconds(df)
+
+    # Calcul les angles et distances pour tous les evenemnts
+    df['Angle'] = df.apply(get_event_angle, axis=1)
+    df['Distance'] = df.apply(get_event_distance, axis=1)
+
+    # Ajouter les colonnes binaires manquantes
+    df['is_goal'] = (df['Event Type'] == 'Goal').astype(int)
+    df['empty_net'] = (df['Net'] == 'Empty').fillna(False).astype(int)
+
+    # Ajouter rebound/angle_change/speed
+    seasons_df = rebound_and_angle_change(df)
+
+    # Ajouter les caractéristiques des power-plays
+    df = add_power_play_features(seasons_df)
+
+    return df
+
+
 if __name__ == '__main__':
     df_train = build_full_feature_set(
         ["2016-2017", "2017-2018", "2018-2019", "2019-2020"],

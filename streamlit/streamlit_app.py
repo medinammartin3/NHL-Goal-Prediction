@@ -1,3 +1,4 @@
+import datetime
 import streamlit as st
 import pandas as pd
 import os
@@ -9,24 +10,21 @@ from ift6758.client.game_client import GameClient
 
 # --- Configuration for Default Model ---
 DEFAULT_WORKSPACE = "IFT6758--2025-A03"
-DEFAULT_MODEL = "LogReg_Model_with_distance_and_angle"
-DEFAULT_VERSION = "v6"
+DEFAULT_MODEL = "XGB_features_and_hp_tuned"  # XGBoost
+DEFAULT_NAME = "XGBoost"
+DEFAULT_VERSION = "v2"
 DEFAULT_PROJECT = "IFT6758.2025-A03"
 
-st.title("NHL Goal prediction")
+st.title("NHL Expected Goals (xG) Prediction")
 
 # --- Initialize Clients ---
 
 # Maintain a single ServingClient for the entire session
 if "serving_client" not in st.session_state:
     serving_ip = os.environ.get("SERVING_IP", "127.0.0.1")
-    serving_port = 5000
-
-    # Remove protocol if present (just to be clean), but the client handles the rest
+    serving_port = int(os.environ.get("SERVING_PORT", 5000))
     serving_ip = serving_ip.replace("https://", "").replace("http://", "").strip("/")
-
-    # We can pass any port (e.g. 80), the client ignores it if "run.app" is in the IP
-    st.session_state["serving_client"] = ServingClient(ip=serving_ip, port=80)
+    st.session_state["serving_client"] = ServingClient(ip=serving_ip, port=serving_port)
 
 serving_client = st.session_state["serving_client"]
 
@@ -42,7 +40,7 @@ if "events_buffers" not in st.session_state:
 # --- Auto-Load Default Model ---
 # This replaces the manual sidebar download
 if serving_client.model is None:
-    with st.spinner(f"Initializing: Downloading default model ({DEFAULT_MODEL})..."):
+    with st.spinner(f"Initializing: Downloading {DEFAULT_NAME} model ..."):
         try:
             result = serving_client.download_registry_model(
                 entity=DEFAULT_WORKSPACE,
@@ -55,16 +53,20 @@ if serving_client.model is None:
             if 'features' in result and result['features'] is not None:
                 serving_client.features = result['features']
 
-            st.success(f"Model loaded successfully")
+            st.success(f"{DEFAULT_NAME} model loaded successfully")
         except Exception as e:
-            st.error(f"Failed to auto-load model: {e}")
+            st.error(f"Failed to auto-load the model: {e}")
 
 # --- Instructions ---
-# Updated to remove the "Load Model" step
 with st.expander("ℹ️ How to use"):
     st.markdown("""
-    1. **Fetch Data:** Enter a **Game ID** (e.g., `2023020001`) and click **Ping Game** (each click loads 5 game events).
-    2. **Analyze:** View the **Scoreboard**, **Shot Maps**, and **xG Charts** below.
+    1. **Pick a Date:** Select a date to see scheduled games.
+    2. **Select Game:** Choose a matchup from the dropdown.
+    3. **Get Events:** Click the **Get Events** button to load 5 events at a time. Click multiple times to load more events until all game events are displayed.
+    
+    **Scroll down to analyze:**
+    * **Visualizations:** Interactive Shot Map & xG Evolution Chart.
+    * **Model Data:** The exact features sent to the model and the calculated predictions.
     """)
 
 st.divider()
@@ -73,7 +75,27 @@ st.divider()
 
 with st.container():
     # Game ID Input
-    game_id = st.text_input("Game ID", value="2023020001")
+    col1, col2 = st.columns([3, 1])
+
+    # -- Date & Game Salector
+    with col1:
+        # Date
+        default_date = datetime.date(2023, 10, 10)
+        selected_date = st.date_input("Select Game Date", value=default_date)
+
+        # Fetch Schedule
+        schedule = game_client.get_schedule(selected_date)
+
+        game_id = None
+
+        if not schedule:
+            st.warning("No games found for this date.")
+        else:
+            # Game (Map Label -> ID)
+            game_options = {g["label"]: str(g["id"]) for g in schedule}
+
+            selected_label = st.selectbox("Select Game", options=list(game_options.keys()))
+            game_id = game_options[selected_label]
 
     if 'previous_game_id' not in st.session_state:
         st.session_state['previous_game_id'] = game_id
@@ -88,14 +110,18 @@ with st.container():
         st.session_state['previous_game_id'] = game_id
 
     # Disable button if auto-load failed (model is None)
-    ping_disabled = (serving_client.model is None)
+    ping_disabled = (serving_client.model is None) or (game_id is None)
 
     if ping_disabled:
         st.error("Model failed to load. Please check your connection or configuration.")
 
-    ping_game = st.button("Get Events", disabled=ping_disabled)
+    # -- Get Events Button --
+    with col2:
+        st.write("")
+        st.write("")
+        ping_game = st.button("Get Events 📡", disabled=ping_disabled, use_container_width=True)
 
-    if ping_game:
+    if ping_game and game_id:
         with st.spinner("Fetching game data..."):
 
             # Process and predict
@@ -181,6 +207,8 @@ with st.container():
                 delta=f"{diff_away:.2f}"
             )
 
+st.divider()
+
 # --- Visualizations ---
 with st.container():
     st.subheader("Visualizations")
@@ -217,18 +245,16 @@ with st.container():
                         y=y_col,
                         color="Team",
                         size="prediction",  # Size proportional to goal probability
-                        size_max=15,
+                        size_max=16,
                         hover_data=["Event Type", "Shooter", "prediction", "Period", "Time"],
                         title=f"Shot Map - {away_team} vs {home_team}",
                         color_discrete_sequence=["blue", "red"],
                         opacity=0.8
                     )
 
-                    rink_image_path = "nhl_rink.png"
-
                     # Encoding
                     try:
-                        with open(rink_image_path, "rb") as image_file:
+                        with open("./figures/nhl_rink.png", "rb") as image_file:
                             encoded_image = base64.b64encode(image_file.read()).decode()
 
                         # Add background image
@@ -332,19 +358,12 @@ with st.container():
 
 # --- Data Table ---
 with st.container():
-    st.subheader("Data used for predictions")
-    cols_to_show = ["Distance", "Angle", "Goal", "Empty Net", "prediction"]
+    st.divider()
+    st.subheader("Model Inputs & Predictions")
     if "events_buffers" in st.session_state and game_id in st.session_state["events_buffers"]:
         buffer = st.session_state["events_buffers"][game_id]
-
-    if "new_events_df" in st.session_state:
-        # If new chunk is empty, show last chunk from buffer
-        if st.session_state["new_events_df"].empty:
-            # Show last chunk from buffer
-            if "events_buffers" in st.session_state and game_id in st.session_state["events_buffers"]:
-                st.write(buffer)
-            else:
-                st.write("No data available at the moment.")
-        else:
-            # Show new chunk
-            st.write(buffer)
+        if not buffer.empty:
+            features_to_show = serving_client.features if serving_client.features else []
+            cols = features_to_show + ["prediction"]
+            cols = [c for c in cols if c in buffer.columns]
+            st.dataframe(buffer[cols], use_container_width=True)

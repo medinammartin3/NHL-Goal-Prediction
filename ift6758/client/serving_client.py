@@ -45,7 +45,7 @@ class ServingClient:
 
             # Prediction service return list of predictions
             # Convert back into dataframe using original input index for alignment
-            preds = pd.DataFrame(data['predictions'], index=X.index)
+            preds = pd.DataFrame(data['predictions'], index=X.index, columns=['prediction'])
             return preds
 
         except requests.RequestException as e:
