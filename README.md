@@ -1,129 +1,126 @@
-# NHL-xG-Prediction-System
+# NHL Expected Goals (xG) Prediction System
 
-A **full-stack machine learning system** for predicting **NHL Expected Goals (xG)** in real time from play-by-play data.  
-The project covers the complete lifecycle of a production-oriented ML system, from data ingestion and modeling to containerized deployment and live visualization.
+![Python](https://img.shields.io/badge/Python-3.9%2B-blue)
+![Docker](https://img.shields.io/badge/Docker-Enabled-2496ED)
+![Streamlit](https://img.shields.io/badge/Frontend-Streamlit-FF4B4B)
+![Flask](https://img.shields.io/badge/Backend-Flask-000000)
+![GCP](https://img.shields.io/badge/Deployment-Google_Cloud_Run-4285F4)
 
+A full-stack Machine Learning application that streams live NHL game data, processes events in real-time, and calculates the **Expected Goals (xG)** probability for every shot. The system is containerized using Docker and deployed on Google Cloud Run.
+
+
+## Table of Contents
+- [Project Overview](#project-overview)
+- [Project Structure](#project-structure)
+- [System Architecture](#system-architecture)
 
 
 ## Project Overview
 
-Expected Goals (xG) is a widely used hockey analytics metric that estimates the probability that a shot results in a goal based on contextual features such as shot location and angle.
+This project implements a complete ML pipeline for hockey analytics. It connects to the **NHL public API** to fetch live play-by-play data, engineers features on the fly (such as shot distance, angle, speed, and rebound status), and queries a serving API to get predictions from a tuned **XGBoost** model.
 
-This project implements:
-- an **xG prediction model** trained on NHL play-by-play data,
-- a **model-as-a-service** architecture exposed through a REST API,
-- a **real-time client** that processes live (or historical) game events,
-- and an **interactive dashboard** for visualizing predictions and game dynamics.
+The goal is to provide real-time insights into game momentum and shot quality that go beyond basic box scores.
 
-The system is designed to be modular, reproducible, and easily extensible to new models or features.
+The system currently operates using the best-performing **XGBoost** model.
 
+### 🔗 [Try the Deployed App Here](https://streamlit-service-478523788975.us-central1.run.app)
 
-
-## System Architecture
-
-The project follows a service-oriented architecture:
-
-1. **Data Client**
-   - Retrieves NHL play-by-play data from the official NHL API
-   - Extracts and preprocesses shot-level features compatible with the model
-
-2. **Prediction Service (Flask)**
-   - Serves trained xG models via a REST API
-   - Supports dynamic model loading and hot-swapping
-   - Logs predictions and system events for debugging and inspection
-
-3. **Visualization Client (Streamlit)**
-   - Displays live or replayed game events
-   - Visualizes xG predictions and game statistics in real time
-   - Communicates with the prediction service through HTTP requests
-
-4. **Containerization (Docker)**
-   - Ensures reproducibility and environment consistency
-   - Separates concerns between inference service and visualization layer
-
-
-
-## Machine Learning Pipeline
-
-- **Task**: Binary classification (goal vs. no goal)
-- **Target**: Probability of a shot resulting in a goal (xG)
-- **Features**:
-  - Shot distance
-  - Shot angle
-  - Empty-net indicator
-- **Models**:
-  - Logistic Regression (baseline, interpretable)
-- **Evaluation**:
-  - ROC curves and AUC
-  - Calibration and probability-based assessment
-
-The predicted probabilities are used directly as xG values rather than hard class labels.
-
-
-
-## Repository Structure
+## Project Structure
 
 ```text
-NHL-xG-Prediction-System/
+NHL-Goal-Prediction/
 │
-├── ift6758/                  # Core package
-│   ├── client/               # Data and serving clients
-│   ├── data/                 # Data loading and preprocessing
-│   ├── serving/              # Flask prediction service
-│   └── utils/                # Shared utilities
+├── figures/
+│   └── Static visual assets.
 │
-├── streamlit_app/            # Interactive dashboard
+├── serving/
+│   └── Model inference service responsible for real-time xG prediction.
+│       This component exposes a REST API that loads a trained ML model
+│       and returns expected goal probabilities for incoming shot or
+│       play-by-play events.
 │
-├── docker/                   # Dockerfiles and container configs
+│       Typical responsibilities:
+│       - Load trained model artifacts
+│       - Validate and preprocess incoming requests
+│       - Perform inference
+│       - Return predictions in JSON format
+│       - Log requests and predictions
 │
-├── notebooks/                # Exploratory analysis and prototyping
+├── src/
+│   └── Core machine learning pipeline logic used across the project.
+│
+│       Contains:
+│       - Data collection, cleaning, preprocessing and visualization
+│       - Feature engineering
+│       - Models implementation, training, and evaluation code
+          └── Implemented Models:
+              - Logistic Regression (baseline)
+              - XGBoost
+              - Catboost
+              - LightGBM
+              - MLP
+              - Stacking (MLP + Catboost + LightGBM)
+│       - Metrics (validation, testing and analysis utilities)
+│       - Shared helpers and configuration files
+│
+├── streamlit/
+│   └── Interactive dashboard built with Streamlit for visualization
+│       and real-time exploration of expected goals.
+│
+│       Responsibilities:
+│       - User-facing UI
+│       - Fetch predictions from the serving API
+│       - Display shot locations, xG timelines, and game summaries
+│       - Provide interactive controls for model and game selection
+│
+├── Dockerfile.serving
+│   └── Docker image definition for the prediction service.
+│       Builds an isolated environment to run the serving API.
+│
+├── Dockerfile.streamlit
+│   └── Docker image definition for the Streamlit dashboard.
+│       Runs the UI as a separate container.
+│
+├── docker-compose.yaml
+│   └── Multi-container orchestration that runs:
+│       - The ML inference service
+│       - The Streamlit dashboard
+│       Enables communication between services via internal networking.
 │
 ├── requirements.txt
-├── README.md
-└── docker-compose.yml
+│   └── Python dependencies required for development, modeling,
+│       serving, and visualization.
+│
+├── setup.py
+│   └── Packaging configuration that makes the src/ directory
+│       installable as a Python module.
+│
+└── README.md
+    └── Project overview and documentation.
 ```
 
 
+## Deployed App Architecture 
 
-## Running the Project
+The application consists of two decoupled microservices:
 
-### Prerequisites
-- Python 3.9+
-- Docker
+1.  **Streamlit Frontend (`/streamlit`):**
+    * User interface for selecting games and visualizing data.
+    * Handles the game logic loop (fetching schedule, pinging events).
+    * Displays Shot Maps (Plotly) and xG Evolution charts.
+2.  **Flask Serving API (`/serving`):**
+    * Loads the trained model artifact from **Weights & Biases (WandB)**.
+    * Exposes a REST API (`/predict`, `/download_registry_model`) to serve predictions.
+    * Handles feature alignment and validation.
 
-### Build and run services
-```bash
-docker-compose up --build
-```
+**Data Flow:**
+`NHL API` → `Game Client (ETL)` → `Flask API (Inference)` → `Streamlit (Visualization)`
 
-### Access the applications
-
-- URL for MAC/Linux : http://0.0.0.0:8501
-- URL for Windows : http://localhost:8501
-
-
-
-## Key Technologies
-
-- Python 
-- scikit-learn 
-- Flask (REST API)
-- Streamlit (interactive visualization)
-- Docker (containerization)
-- Weights & Biases (experiment tracking & model registry)
-- Learning Outcomes 
-- This project demonstrates:
-- End-to-end ML system design 
-- Feature engineering from real-world, noisy data 
-- Model deployment as a service 
-- API-based ML inference 
-- Real-time data processing and visualization 
-- Reproducible and modular ML engineering practices 
-
-
-
-
-
-Add advanced feature engineering (rebound shots, game state, prior events)
-
-Integrate more expressive models (Gradient Boosting, Neural Networks)
+### Features
+* **Schedule Explorer:** Select any date and pick specific matchups (e.g., *Canadiens vs. Bruins*).
+* **Real-Time Simulation:** "Ping" the game to load events in batches, simulating a live feed.
+* **Interactive Visualizations:**
+    * **Shot Map:** Rink overlay showing shot locations, sized by goal probability.
+    * **xG Evolution:** Cumulative xG line chart to track team dominance over time.
+* **Advanced Metrics:** Displays calculated features (Distance, Angle, Speed, Rebound) alongside the raw event data.
+* **Auto-Model Loading:** Automatically pulls the latest production-ready XGBoost model from the registry.
