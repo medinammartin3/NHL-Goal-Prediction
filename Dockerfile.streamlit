@@ -1,27 +1,22 @@
-FROM python:3.7
+FROM python:3.12-slim
 
 WORKDIR /code
 
-# Add code
-ADD ./streamlit_app.py ./streamlit_app.py
-ADD ./figures/nhl_rink.png ./figures/nhl_rink.png
-ADD ./ift6758 ./ift6758
-
-# Update pip
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+# Copy requirements
+COPY streamlit/requirements_streamlit.txt .
 
 # Install dependencies
-RUN pip install --no-cache-dir -r ./ift6758/client/requirements_streamlit.txt
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+RUN pip install --no-cache-dir -r requirements_streamlit.txt
 
-# Install package ift6758 for imports
+# Copy application code
+COPY streamlit/streamlit_app.py .
+COPY figures ./figures
+COPY ift6758 ./ift6758
+
+# Install local package for imports
 RUN pip install -e ./ift6758
 
-# Exposer port (8501 = Streamlit default)
 EXPOSE 8501
 
-# Run command
-CMD ["streamlit", "run", "streamlit_app.py", "--server.port", "8501", "--server.address", "0.0.0.0"]
-
-# IMPORTANT:
-# URL for MAC/Linux : http://0.0.0.0:8501
-# URL for Windows : http://localhost:8501
+CMD ["streamlit", "run", "streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"]

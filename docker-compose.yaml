@@ -2,8 +2,8 @@ services:
   serving:
     build:
       context: ./
-      dockerfile: ./Dockerfile.serving
-    image: ift6758/serving:latest
+      dockerfile: Dockerfile.serving
+    image: nhl-goal-prediction/serving:latest
     ports:
       - 5000:5000
     environment:
@@ -12,8 +12,8 @@ services:
   streamlit:
     build:
       context: ./
-      dockerfile: ./Dockerfile.streamlit
-    image: ift6758/streamlit:latest
+      dockerfile: Dockerfile.streamlit
+    image: nhl-goal-prediction/streamlit:latest
     ports:
       - "8501:8501"
     environment:
